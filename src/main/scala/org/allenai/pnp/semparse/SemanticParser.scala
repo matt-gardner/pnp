@@ -219,6 +219,7 @@ class SemanticParser(val actionSpace: ActionSpace, val vocab: IndexedList[String
         entities.map(e => encodeEntityWithGraph(e, knowledgeGraphEmbedding, computationGraph))
       } else {
         entities.map(e => encodeType(e))
+        throw new RuntimeException()
       }
       val entityEmbeddingMatrix = Expression.concatenateCols(new ExpressionVector(entityEmbeddings))
 
@@ -307,6 +308,7 @@ class SemanticParser(val actionSpace: ActionSpace, val vocab: IndexedList[String
     // Expression.input(Dim(config.entityDim), new FloatVector(List.fill(config.entityDim)(0.0f)))
     val v = new FloatVector(List.fill(config.entityDim)(0.0f))
     v.update(actionSpace.typeIndex.getIndex(entity.t), 1.0f)
+    println(v)
     Expression.input(Dim(config.entityDim), v)
   }
 
@@ -413,6 +415,9 @@ class SemanticParser(val actionSpace: ActionSpace, val vocab: IndexedList[String
       // applicable templates given the hole's type.
       val hole = state.unfilledHoleIds.head
       val actionTemplates = actionSpace.getTemplates(hole.t)
+      println(hole)
+      println(hole.t)
+      println(actionTemplates)
       val allVariableTemplates = hole.scope.getVariableTemplates(hole.t)
       val variableTemplates = if (allVariableTemplates.length > config.maxVars) {
         // The model only has parameters for MAX_VARS variables.
@@ -424,8 +429,10 @@ class SemanticParser(val actionSpace: ActionSpace, val vocab: IndexedList[String
 
       val entities = input.entityEncoding.entityLinking.getEntitiesWithType(hole.t)
       val entityTemplates = entities.map(_.template)
+      println(entityTemplates.toList)
       val entityTokenMatrix = input.entityEncoding.tokenEntityScoreMatrices.getOrElse(hole.t, null)
 
+      println()
       val allTemplates = baseTemplates ++ entityTemplates
 
       // Update the LSTM and use its output to score
@@ -894,6 +901,7 @@ object SemanticParser {
     for (t <- actionSpace.getTypes) {
       val actions = actionSpace.getTemplates(t)
       val dim = actions.length + config.maxVars
+      println("Type:" + t + ", dim:" + dim)
 
       model.addParameter(BEGIN_ACTIONS + t, Dim(config.actionDim + 2 * config.hiddenDim))
       model.addLookupParameter(ACTION_LOOKUP_PARAM + t, dim, Dim(config.actionDim))

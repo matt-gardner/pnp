@@ -25,6 +25,7 @@ import edu.stanford.nlp.sempre._
 import java.nio.file.Paths
 import java.nio.file.Files
 import java.nio.charset.StandardCharsets
+import java.io.PrintWriter
 
 import com.jayantkrish.jklol.util.CountAccumulator
 import com.jayantkrish.jklol.ccg.lambda2.Expression2
@@ -32,7 +33,7 @@ import edu.stanford.nlp.sempre.tables.TableKnowledgeGraph
 import fig.basic.LispTree
 
 class TestWikiTablesCli extends AbstractCli() {
-  
+
   import TestWikiTablesCli._
 
   var testDataOpt: OptionSpec[String] = null
@@ -41,7 +42,7 @@ class TestWikiTablesCli extends AbstractCli() {
   var modelOpt: OptionSpec[String] = null
 
   var tsvOutputOpt: OptionSpec[String] = null
-  
+
   var beamSizeOpt: OptionSpec[Integer] = null
   var evaluateDpdOpt: OptionSpec[Void] = null
   var maxDerivationsOpt: OptionSpec[Integer] = null
@@ -56,7 +57,7 @@ class TestWikiTablesCli extends AbstractCli() {
     derivationsPathOpt = parser.accepts("derivationsPath").withRequiredArg().ofType(classOf[String])
     noDerivationsOpt = parser.accepts("noDerivations")
     modelOpt = parser.accepts("model").withRequiredArg().ofType(classOf[String]).withValuesSeparatedBy(',').required()
-    
+
     tsvOutputOpt = parser.accepts("tsvOutput").withRequiredArg().ofType(classOf[String])
 
     beamSizeOpt = parser.accepts("beamSize").withRequiredArg().ofType(classOf[Integer]).defaultsTo(5)
@@ -71,7 +72,7 @@ class TestWikiTablesCli extends AbstractCli() {
   override def run(options: OptionSet): Unit = {
     Initialize.initialize(Map("dynet-mem" -> "4096"))
 
-    // Get the predicted denotations of each model. (and print out 
+    // Get the predicted denotations of each model. (and print out
     // error analysis)
     val modelDenotations = if (options.has(questionOpt)) {
       // Single question mode
@@ -99,13 +100,13 @@ class TestWikiTablesCli extends AbstractCli() {
     } else {
       modelDenotations.head
     }
-    
+
     /*
     println("*** Validating test set action space ***")
     val testSeparatedLfs = WikiTablesSemanticParserCli.getCcgDataset(testPreprocessed)
     SemanticParserUtils.validateActionSpace(testSeparatedLfs, parser, typeDeclaration)
     */
-    
+
     if (options.has(tsvOutputOpt)) {
       val filename = options.valueOf(tsvOutputOpt)
       val tsvStrings = denotations.map { d =>
@@ -121,6 +122,27 @@ class TestWikiTablesCli extends AbstractCli() {
     val comparator = new SimplificationComparator(simplifier)
 
     val parser = loadSerializedParser(modelFilename)
+    /*
+    val outfile = new PrintWriter("parameters.txt")
+    for ((paramName, parameter) <- parser.model.getComputationGraph.paramNames.toSeq.sortBy(_._1)) {
+      val values = parameter.values().toVector
+      val average = values.sum / values.size
+      val std = math.sqrt(values.map(x => math.pow(x - average, 2)).sum / (values.size - 1))
+      outfile.println(paramName + ", " + parameter.dim().rows() + ", " +  parameter.dim().cols() + ", " +  parameter.dim.size() + ", " + average + " +/- " + std)
+    }
+    for ((paramName, parameter) <- parser.model.getComputationGraph.lookupParamNames) {
+      outfile.println(paramName + ", " + parameter.dim().nDims() + ", " +  parameter.dim().rows() + ", " +  parameter.dim().cols() + ", " +  parameter.dim.size())
+    }
+    for (lookupParameter <- parser.model.lookupParametersList) {
+      outfile.println(lookupParameter.size())
+    }
+    val total_params = (parser.model.getComputationGraph.paramNames.values.map(_.dim().size()).sum +
+      parser.model.lookupParametersList.map(_.size()).sum)
+    outfile.println(total_params)
+    outfile.println("Vocab size: " + parser.vocab.size)
+    outfile.close()
+    return Map()
+    */
     val featureGenerator = parser.config.featureGenerator.get
     val typeDeclaration = parser.config.typeDeclaration
     val lfPreprocessor = parser.config.preprocessor
@@ -193,7 +215,7 @@ object TestWikiTablesCli {
   def main(args: Array[String]): Unit = {
     (new TestWikiTablesCli()).run(args)
   }
-  
+
   /** Evaluate the test accuracy of parser on examples. Logical
    * forms are compared for equality using comparator.
    */
@@ -224,7 +246,7 @@ object TestWikiTablesCli {
       val correctAndValue = beam.map { x =>
         val expression = x.value.decodeExpression
         val value = e.executeFormula(preprocessor.postprocess(expression))
-        
+
         val isCorrect = if (evaluateDpd) {
           // Evaluate the logical forms using the output of dynamic programming on denotations.
           e.logicalForms.size > 0 && e.logicalForms.map(x => comparator.equals(x, expression)).reduce(_ || _)
@@ -244,11 +266,11 @@ object TestWikiTablesCli {
           print("  " + x.logProb.formatted("%02.3f") + "  " + expression + " -> " + value)
           false
         }
-        
+
         (isCorrect, value, x.logProb)
       }
-      
-      var exampleCorrect = false  
+
+      var exampleCorrect = false
       if (correctAndValue.length > 0) {
         if (correctAndValue(0)._1) {
           numCorrect += 1
@@ -262,16 +284,16 @@ object TestWikiTablesCli {
       // Store all defined values sorted in probability order
       exampleDenotations(e.id) = correctAndValue.filter(_._2.isDefined).map(
           x => (x._2.get, x._3)).toList
-      
+
       print("id: " + e.id + " " + exampleCorrect)
 
       // Re-parse with a label oracle to find the highest-scoring correct parses.
       if (evaluateOracle) {
         val oracle = parser.getMultiLabelScore(e.logicalForms, entityLinking, typeDeclaration)
-        if (oracle.isDefined) { 
+        if (oracle.isDefined) {
           val oracleContext = PnpInferenceContext.init(parser.model).addExecutionScore(oracle.get)
           val oracleResults = dist.beamSearch(beamSize, 75, Env.init, oracleContext)
-            
+
           oracleResults.executions.map { x =>
             val expression = x.value.decodeExpression
             print("o " + x.logProb.formatted("%02.3f") + "  " + expression)
@@ -285,7 +307,7 @@ object TestWikiTablesCli {
       if (beam.nonEmpty) {
         printAttentions(beam(0).value, e.sentence.getWords.asScala.toArray, print)
       }
-      
+
       printEntityTokenFeatures(entityLinking, e.sentence.getWords.asScala.toArray, print)
     }
 
@@ -317,14 +339,14 @@ object TestWikiTablesCli {
       print("  " + tokenStrings.mkString(" ") + " " + templates(i))
     }
   }
-  
+
   def printEntityTokenFeatures(entityLinking: EntityLinking, tokens: Array[String],
       print: Any => Unit): Unit = {
     for ((entity, features) <- entityLinking.entities.zip(entityLinking.entityTokenFeatures)) {
       val dim = features._1
       val featureMatrix = features._2
       val values = Expression.input(dim, featureMatrix)
-      
+
       for ((token, i) <- tokens.zipWithIndex) {
         val features = ComputationGraph.incrementalForward(Expression.pick(values, i)).toSeq
         if (features.filter(_ != 0.0f).size > 0) {
@@ -333,7 +355,7 @@ object TestWikiTablesCli {
       }
     }
   }
-  
+
   def getAnswerTsvParts(values: List[Value]): List[String] = {
     // Don't return the empty string, because it's always wrong.
     // Empty string can come from null values or
@@ -356,7 +378,7 @@ object TestWikiTablesCli {
       valueToString(value).toList
     }
   }
-  
+
   def valueToString(value: Value): Option[String] = {
     if (value.isInstanceOf[NameValue]) {
       Some(value.asInstanceOf[NameValue].description)
@@ -364,13 +386,13 @@ object TestWikiTablesCli {
       Some(value.asInstanceOf[NumberValue].value.toString)
     } else if (value.isInstanceOf[DateValue]) {
       val d = value.asInstanceOf[DateValue]
-      
+
       Some(datePartToString(d.year) + "-" + datePartToString(d.month) + "-" + datePartToString(d.day))
     } else {
       None
     }
   }
-  
+
   def datePartToString(d: Int): String = {
     if (d == -1) {
       "xx"
@@ -378,7 +400,7 @@ object TestWikiTablesCli {
       d.toString
     }
   }
-  
+
   // This makes strings printable in tsv format while also retaining correctness
   // of evaluate.py.
   def tsvEscape(s: String): String = {

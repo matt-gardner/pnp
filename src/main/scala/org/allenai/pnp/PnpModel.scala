@@ -47,6 +47,9 @@ class PnpModel(var names: Map[String, Parameter], var lookupNames: Map[String, L
     lookupNames(name)
   }
 
+  def parametersList() = model.parametersList()
+  def lookupParametersList() = model.lookupParametersList()
+
   def getComputationGraph(): CompGraph = {
     new CompGraph(model, names, lookupNames, locallyNormalized)
   }
